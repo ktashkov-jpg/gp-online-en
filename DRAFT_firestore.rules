@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 3. Primitive Definition
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Entity Validations
+    function isValidDoctor(data) {
+      return data.uid == request.auth.uid 
+        && data.name is string && data.name.size() > 0 
+        && data.email is string
+        && data.specialty is string
+        && data.workingHours is map;
+    }
+
+    function isValidPatient(data) {
+      return data.uid == request.auth.uid
+        && data.name is string && data.name.size() > 0
+        && data.email is string
+        && (data.phone is string)
+        && (data.assignedDoctorId is string);
+    }
+
+    function isValidAppointment(data) {
+      return data.patientId == request.auth.uid
+        && data.doctorId is string && isValidId(data.doctorId)
+        && data.startTime is timestamp
+        && data.endTime is timestamp
+        && data.status in ['pending', 'confirmed', 'cancelled']
+        && (data.createdAt == request.time || data.createdAt is timestamp);
+    }
+
+    // 1. The Master Gate (Relational Sync)
+    match /doctors/{doctorId} {
+      allow get, list: if isSignedIn();
+      allow create: if isOwner(doctorId) && isValidDoctor(incoming());
+      allow update: if isOwner(doctorId) && isValidDoctor(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'specialty', 'workingHours'])
+      );
+    }
+
+    match /patients/{patientId} {
+      allow get: if isOwner(patientId) || exists(/databases/$(database)/documents/doctors/$(request.auth.uid));
+      allow list: if isSignedIn(); // Broaden for registry checks but logic inside App handles filtering
+      allow create: if isOwner(patientId) && isValidPatient(incoming());
+      allow update: if isOwner(patientId) && isValidPatient(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'assignedDoctorId'])
+      );
+    }
+
+    match /appointments/{appointmentId} {
+      allow get: if isSignedIn() && (
+        resource.data.patientId == request.auth.uid || 
+        resource.data.doctorId == request.auth.uid
+      );
+      allow list: if isSignedIn() && (
+        resource.data.patientId == request.auth.uid || 
+        resource.data.doctorId == request.auth.uid
+      );
+      
+      allow create: if isSignedIn() && isValidAppointment(incoming()) && (
+        incoming().status == 'pending' &&
+        exists(/databases/$(database)/documents/doctors/$(incoming().doctorId))
+      );
+      
+      allow update: if isSignedIn() && isValidAppointment(incoming()) && (
+        // Action: Change Status (Doctor)
+        (existing().doctorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Action: Cancel (Patient)
+        (existing().patientId == request.auth.uid && incoming().status == 'cancelled' && incoming().diff(existing()).affectedKeys().hasOnly(['status'])) ||
+        // Action: Edit Reason (Patient)
+        (existing().patientId == request.auth.uid && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['reason']))
+      );
+      
+      allow delete: if false; // Prefer cancellation state
+    }
+  }
+}

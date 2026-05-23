@@ -1,0 +1,6 @@
+{
+  "name": "GP Online",
+  "description": "Online booking platform with simultaneous Calendar sync for doctors and patients",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

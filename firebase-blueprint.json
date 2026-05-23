@@ -1,0 +1,61 @@
+{
+  "entities": {
+    "Doctor": {
+      "title": "Doctor",
+      "description": "Doctor profile and schedule information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "specialty": { "type": "string" },
+        "workingHours": { "type": "object" },
+        "googleCalendarId": { "type": "string" },
+        "syncEnabled": { "type": "boolean" }
+      },
+      "required": ["uid", "name"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "Patient profile and doctor association",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "assignedDoctorId": { "type": "string" }
+      },
+      "required": ["uid", "name"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Medical appointment record",
+      "type": "object",
+      "properties": {
+        "patientId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["pending", "confirmed", "cancelled"] },
+        "reason": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["patientId", "doctorId", "startTime", "endTime", "status"]
+    }
+  },
+  "firestore": {
+    "/doctors/{doctorId}": {
+      "schema": "Doctor",
+      "description": "Doctor profiles"
+    },
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Patient profiles"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Appointment records"
+    }
+  }
+}
